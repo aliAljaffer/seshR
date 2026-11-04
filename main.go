@@ -145,7 +145,13 @@ func opencode(home string, since time.Time) []sess {
 		return nil
 	}
 	defer db.Close()
-	rows, err := db.Query("select id, directory, title, time_updated from session where parent_id is null and time_archived is null and time_updated > ?", since.UnixMilli())
+	// OpenCode 2.x renamed the table; older installs still use "session".
+	tbl := "session"
+	var n int
+	if db.QueryRow("select count(*) from sqlite_master where type='table' and name='session_v2'").Scan(&n) == nil && n > 0 {
+		tbl = "session_v2"
+	}
+	rows, err := db.Query("select id, directory, coalesce(title, ''), time_updated from "+tbl+" where parent_id is null and time_archived is null and time_updated > ?", since.UnixMilli())
 	if err != nil {
 		return nil
 	}
