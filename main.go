@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"database/sql"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -13,6 +14,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 type sess struct {
@@ -25,12 +28,6 @@ func (s sess) cmd() []string {
 		return []string{"claude", "--resume", s.ID}
 	}
 	return []string{"opencode", "-s", s.ID}
-}
-
-func alive(pid int) bool {
-	out, err := exec.Command("ps", "-o", "command=", "-p", strconv.Itoa(pid)).Output()
-	// A reused PID runs some other command.
-	return err == nil && strings.Contains(string(out), "claude")
 }
 
 func claude(home string, since time.Time) []sess {
@@ -50,7 +47,7 @@ func claude(home string, since time.Time) []sess {
 			continue
 		}
 		st := "crashed"
-		if alive(r.PID) {
+		if alive(r.PID, time.UnixMilli(r.StartedAt)) {
 			st = "open"
 		}
 		t := r.UpdatedAt
@@ -58,7 +55,7 @@ func claude(home string, since time.Time) []sess {
 			t = r.StartedAt
 		}
 		seen[r.SessionID] = true
-		out = append(out, sess{"claude", r.SessionID, r.Cwd, r.Name, st, time.UnixMilli(t)})
+		out = append(out, sess{"claude", r.SessionID, r.Cwd, titleOf(home, r.SessionID, r.Name), st, time.UnixMilli(t)})
 	}
 	// Fallback in case Claude Code prunes stale registry files: recent transcripts.
 	jl, _ := filepath.Glob(filepath.Join(home, ".claude/projects/*/*.jsonl"))
@@ -69,10 +66,56 @@ func claude(home string, since time.Time) []sess {
 			continue
 		}
 		if cwd := transcriptCwd(f); cwd != "" {
-			out = append(out, sess{"claude", id, cwd, "", "recent", fi.ModTime()})
+			out = append(out, sess{"claude", id, cwd, titleOf(home, id, ""), "recent", fi.ModTime()})
 		}
 	}
 	return out
+}
+
+// titleOf returns the AI title, else the last prompt, else fallback. Both are
+// rewritten as the session grows, so the file tail is enough.
+func titleOf(home, id, fallback string) string {
+	files, _ := filepath.Glob(filepath.Join(home, ".claude/projects/*", id+".jsonl"))
+	if len(files) == 0 {
+		return fallback
+	}
+	fh, err := os.Open(files[0])
+	if err != nil {
+		return fallback
+	}
+	defer fh.Close()
+	const tail = 256 << 10
+	buf := make([]byte, tail)
+	n, _ := fh.ReadAt(buf, max(0, fileSize(fh)-tail))
+	var title, prompt string
+	for _, l := range strings.Split(string(buf[:n]), "\n") {
+		var e struct{ AiTitle, LastPrompt string }
+		if strings.HasPrefix(l, `{"type":"ai-title"`) || strings.HasPrefix(l, `{"type":"last-prompt"`) {
+			if json.Unmarshal([]byte(l), &e) == nil {
+				if e.AiTitle != "" {
+					title = e.AiTitle
+				}
+				if e.LastPrompt != "" {
+					prompt = e.LastPrompt
+				}
+			}
+		}
+	}
+	switch {
+	case title != "":
+		return title
+	case prompt != "":
+		return prompt
+	}
+	return fallback
+}
+
+func fileSize(f *os.File) int64 {
+	fi, err := f.Stat()
+	if err != nil {
+		return 0
+	}
+	return fi.Size()
 }
 
 func transcriptCwd(f string) string {
@@ -93,25 +136,27 @@ func transcriptCwd(f string) string {
 }
 
 func opencode(home string, since time.Time) []sess {
-	db := filepath.Join(home, ".local/share/opencode/opencode.db")
-	if _, err := os.Stat(db); err != nil {
+	p := filepath.Join(home, ".local/share/opencode/opencode.db")
+	if _, err := os.Stat(p); err != nil {
 		return nil
 	}
-	q := fmt.Sprintf("select id, directory, title, time_updated as t from session where parent_id is null and time_archived is null and time_updated > %d", since.UnixMilli())
-	b, err := exec.Command("sqlite3", "-readonly", "-json", db, q).Output()
-	if err != nil || len(b) == 0 {
+	db, err := sql.Open("sqlite", "file:"+p+"?mode=ro&_pragma=busy_timeout(2000)")
+	if err != nil {
 		return nil
 	}
-	var rows []struct {
-		ID, Directory, Title string
-		T                    int64 `json:"t"`
-	}
-	if json.Unmarshal(b, &rows) != nil {
+	defer db.Close()
+	rows, err := db.Query("select id, directory, title, time_updated from session where parent_id is null and time_archived is null and time_updated > ?", since.UnixMilli())
+	if err != nil {
 		return nil
 	}
+	defer rows.Close()
 	var out []sess
-	for _, r := range rows {
-		out = append(out, sess{"opencode", r.ID, r.Directory, r.Title, "recent", time.UnixMilli(r.T)})
+	for rows.Next() {
+		var id, dir, title string
+		var t int64
+		if rows.Scan(&id, &dir, &title, &t) == nil {
+			out = append(out, sess{"opencode", id, dir, title, "recent", time.UnixMilli(t)})
+		}
 	}
 	return out
 }
@@ -153,10 +198,14 @@ func main() {
 }
 
 func label(s sess) string {
-	if s.Name != "" {
-		return s.Name
+	if s.Name == "" {
+		return s.ID[:8]
 	}
-	return s.ID[:8]
+	n := strings.Join(strings.Fields(s.Name), " ")
+	if r := []rune(n); len(r) > 70 {
+		return string(r[:69]) + "…"
+	}
+	return n
 }
 
 func ago(t time.Time) string {
