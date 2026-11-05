@@ -169,8 +169,9 @@ func opencode(home string, since time.Time) []sess {
 
 func main() {
 	win := flag.Duration("since", 24*time.Hour, "include recent (non-registry) sessions newer than this")
+	here := flag.Bool("here", false, "only sessions in the current directory")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h]   list sessions\n       seshr N              resume session N in its directory")
+		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h] [--here]   list sessions\n       seshr N              resume session N in its directory")
 	}
 	flag.Parse()
 	home, _ := os.UserHomeDir()
@@ -198,7 +199,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	cwd, _ := os.Getwd()
 	for i, s := range all {
+		if *here && filepath.Clean(s.Dir) != cwd {
+			continue
+		}
 		fmt.Printf("%2d  %-8s %-7s %-5s %s  %s\n", i+1, s.Tool, s.State, ago(s.When), strings.Replace(s.Dir, home, "~", 1), label(s))
 	}
 }
