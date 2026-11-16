@@ -30,7 +30,7 @@ func (s sess) cmd() []string {
 	return []string{"opencode", "-s", s.ID}
 }
 
-func claude(home string, since time.Time) []sess {
+func claude(home string, since time.Time, dir string) []sess {
 	var out []sess
 	seen := map[string]bool{}
 	files, _ := filepath.Glob(filepath.Join(home, ".claude/sessions/*.json"))
@@ -58,7 +58,11 @@ func claude(home string, since time.Time) []sess {
 		out = append(out, sess{"claude", r.SessionID, r.Cwd, titleOf(home, r.SessionID, r.Name), st, time.UnixMilli(t)})
 	}
 	// Fallback in case Claude Code prunes stale registry files: recent transcripts.
-	jl, _ := filepath.Glob(filepath.Join(home, ".claude/projects/*/*.jsonl"))
+	proj := "*"
+	if dir != "" {
+		proj = projDir(dir)
+	}
+	jl, _ := filepath.Glob(filepath.Join(home, ".claude/projects", proj, "*.jsonl"))
 	for _, f := range jl {
 		id := strings.TrimSuffix(filepath.Base(f), ".jsonl")
 		fi, err := os.Stat(f)
@@ -66,7 +70,7 @@ func claude(home string, since time.Time) []sess {
 			continue
 		}
 		if cwd := transcriptCwd(f); cwd != "" {
-			out = append(out, sess{"claude", id, cwd, titleOf(home, id, ""), "recent", fi.ModTime()})
+			out = append(out, sess{"claude", id, cwd, titleIn(f, ""), "recent", fi.ModTime()})
 		}
 	}
 	return out
@@ -79,7 +83,22 @@ func titleOf(home, id, fallback string) string {
 	if len(files) == 0 {
 		return fallback
 	}
-	fh, err := os.Open(files[0])
+	return titleIn(files[0], fallback)
+}
+
+// projDir maps a directory to its Claude project folder name. Only "/" is
+// confirmed; other punctuation is assumed to become "-" too.
+func projDir(dir string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 128 && (r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+			return r
+		}
+		return '-'
+	}, dir)
+}
+
+func titleIn(path, fallback string) string {
+	fh, err := os.Open(path)
 	if err != nil {
 		return fallback
 	}
@@ -135,7 +154,7 @@ func transcriptCwd(f string) string {
 	return ""
 }
 
-func opencode(home string, since time.Time) []sess {
+func opencode(home string, since time.Time, dir string) []sess {
 	p := filepath.Join(home, ".local/share/opencode/opencode.db")
 	if _, err := os.Stat(p); err != nil {
 		return nil
@@ -151,7 +170,11 @@ func opencode(home string, since time.Time) []sess {
 	if db.QueryRow("select count(*) from sqlite_master where type='table' and name='session_v2'").Scan(&n) == nil && n > 0 {
 		tbl = "session_v2"
 	}
-	rows, err := db.Query("select id, directory, coalesce(title, ''), time_updated from "+tbl+" where parent_id is null and time_archived is null and time_updated > ?", since.UnixMilli())
+	q, args := "select id, directory, coalesce(title, ''), time_updated from "+tbl+" where parent_id is null and time_archived is null and time_updated > ?", []any{since.UnixMilli()}
+	if dir != "" {
+		q, args = q+" and directory = ?", append(args, dir)
+	}
+	rows, err := db.Query(q, args...)
 	if err != nil {
 		return nil
 	}
@@ -176,10 +199,12 @@ func main() {
 	flag.Parse()
 	home, _ := os.UserHomeDir()
 	since := time.Now().Add(-*win)
+	cwd, _ := os.Getwd()
+	var dir string
 	if *here {
-		since = time.Time{}
+		since, dir = time.Time{}, cwd
 	}
-	all := append(claude(home, since), opencode(home, since)...)
+	all := append(claude(home, since, dir), opencode(home, since, dir)...)
 	sort.Slice(all, func(i, j int) bool { return all[i].When.After(all[j].When) })
 
 	if flag.NArg() == 1 {
@@ -202,7 +227,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	cwd, _ := os.Getwd()
 	for i, s := range all {
 		if *here && filepath.Clean(s.Dir) != cwd {
 			continue
