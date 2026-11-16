@@ -169,13 +169,16 @@ func opencode(home string, since time.Time) []sess {
 
 func main() {
 	win := flag.Duration("since", 24*time.Hour, "include recent (non-registry) sessions newer than this")
-	here := flag.Bool("here", false, "only sessions in the current directory")
+	here := flag.Bool("here", false, "all sessions (any age) started in the current directory")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h] [--here]   list sessions\n       seshr N              resume session N in its directory")
+		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h] [--here]   list sessions\n       seshr [--here] N     resume session N in its directory")
 	}
 	flag.Parse()
 	home, _ := os.UserHomeDir()
 	since := time.Now().Add(-*win)
+	if *here {
+		since = time.Time{}
+	}
 	all := append(claude(home, since), opencode(home, since)...)
 	sort.Slice(all, func(i, j int) bool { return all[i].When.After(all[j].When) })
 

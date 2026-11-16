@@ -42,13 +42,13 @@ Change how far back "recent" sessions go (default 24h):
 seshr -since 72h
 ```
 
-List only sessions in the current directory:
+List every session started in the current directory, current and past (ignores `-since`):
 
 ```sh
 seshr --here
 ```
 
-Numbers match the full list, so `seshr N` resumes the same session with or without `--here`.
+Numbers come from the `--here` list. Resume with the same flag: `seshr --here N`.
 
 ## States
 
