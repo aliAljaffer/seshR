@@ -11,6 +11,8 @@ class Seshr < Formula
   def install
     ldflags = %W[-X main.version=#{version}]
     system "go", "build", *std_go_args(ldflags:), "."
+    bash_completion.install "completions/seshr.bash" => "seshr"
+    zsh_completion.install "completions/_seshr"
   end
 
   test do

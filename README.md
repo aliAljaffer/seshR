@@ -28,6 +28,8 @@ make install
 
 `make install` builds the binary and links it to `~/.local/bin/seshr`.
 
+Homebrew installs bash and zsh completion. `make install` links them under `~/.local/share`. zsh also needs `~/.local/share/zsh/site-functions` in `fpath`.
+
 ## Upgrade
 
 ```sh

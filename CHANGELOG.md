@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-17
+
+### Added
+
+- bash and zsh completion, installed by Homebrew and `make install`.
+- `make brew` replaces the local install with the Homebrew one.
+- `make clean` removes the built binary.
+
+### Changed
+
+- CI skips runs for changes to `Formula/**`.
+
 ## [0.1.0] - 2026-11-17
 
 ### Added

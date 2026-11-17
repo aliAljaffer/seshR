@@ -1,0 +1,13 @@
+#compdef seshr
+
+if (( CURRENT == 2 )); then
+  _describe 'command' '(upgrade:"upgrade to the latest release")'
+fi
+if [[ $words[2] == upgrade ]]; then
+  _arguments '(-y --yes)'{-y,--yes}'[upgrade without asking]'
+else
+  _arguments \
+    '--here[all sessions started in the current directory]' \
+    '--since[include recent sessions newer than this]:duration' \
+    '--version[print the version]'
+fi
