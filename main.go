@@ -193,10 +193,22 @@ func opencode(home string, since time.Time, dir string) []sess {
 func main() {
 	win := flag.Duration("since", 24*time.Hour, "include recent (non-registry) sessions newer than this")
 	here := flag.Bool("here", false, "all sessions (any age) started in the current directory")
+	ver := flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h] [--here]   list sessions\n       seshr [--here] N     resume session N in its directory")
+		fmt.Fprintln(os.Stderr, "usage: seshr [-since 24h] [--here]   list sessions\n       seshr [--here] N     resume session N in its directory\n       seshr upgrade [-y]   upgrade to the latest release")
+	}
+	if len(os.Args) > 1 && os.Args[1] == "upgrade" {
+		if err := upgrade(os.Args[2:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		return
 	}
 	flag.Parse()
+	if *ver {
+		fmt.Println("seshr version", version)
+		return
+	}
 	home, _ := os.UserHomeDir()
 	since := time.Now().Add(-*win)
 	cwd, _ := os.Getwd()

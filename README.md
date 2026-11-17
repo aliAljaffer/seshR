@@ -1,20 +1,40 @@
 # seshR
 
+[![CI](https://github.com/alialjaffer/seshr/actions/workflows/ci.yml/badge.svg?branch=main&event=push)](https://github.com/alialjaffer/seshr/actions/workflows/ci.yml)
+
 Lists your Claude Code and OpenCode sessions with their directories. Resume any of them from any directory.
 
 I lose all my terminal tabs when Ghostty crashes. This tells me what was open.
 
 ## Install
 
-Requires Go and macOS or Linux.
+Requires macOS or Linux.
+
+**Homebrew:**
 
 ```sh
-git clone https://github.com/aliAljaffer/seshR.git
-cd seshR
+brew install alialjaffer/tap/seshr
+```
+
+**Prebuilt binary** from [Releases](https://github.com/alialjaffer/seshr/releases), for macOS and Linux (amd64 and arm64). Verify with `checksums.txt`.
+
+**From source** (needs Go):
+
+```sh
+git clone https://github.com/alialjaffer/seshr.git
+cd seshr
 make install
 ```
 
 `make install` builds the binary and links it to `~/.local/bin/seshr`.
+
+## Upgrade
+
+```sh
+seshr upgrade
+```
+
+Homebrew installs run `brew upgrade`. Other installs download the latest release binary and check its checksum. From a source clone, run `make upgrade`.
 
 ## Use
 

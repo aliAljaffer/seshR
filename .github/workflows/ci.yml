@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "LICENSE"
+      - ".gitignore"
+      - ".github/workflows/release.yml"
+  # All PRs run CI. A paths-ignore here would leave go-check unreported, and it
+  # is a required status check on main, which would deadlock docs-only PRs.
+  pull_request:
+
+jobs:
+  go-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - name: Verify dependencies (go mod tidy)
+        run: |
+          go mod tidy && echo "Go is tidy"
+
+      - name: Build package
+        run: go build ./...
+
+      - name: Vet package
+        run: go vet ./...
+
+      - name: Run tests
+        run: go test ./...
